@@ -95,7 +95,14 @@ function titleFromMarkdown(content: string, fallback: string) {
 function excerptFromMarkdown(content: string) {
   const paragraph = content
     .split(/\r?\n\r?\n/)
-    .map((block) => block.replace(/^#+\s+/gm, "").trim())
+    .map((block) =>
+      block
+        .replace(/^#+\s+/gm, "")
+        .split(/\r?\n/)
+        .filter((line) => !line.trim().startsWith("作者"))
+        .join(" ")
+        .trim()
+    )
     .find((block) => block.length > 20);
 
   return paragraph ? `${paragraph.slice(0, 118)}...` : "来自 HDU 学长学姐的经验文章。";
@@ -120,7 +127,11 @@ export function getArticles(): Article[] {
         content
       };
     })
-    .sort((a, b) => a.title.localeCompare(b.title, "zh-CN"));
+    .sort((a, b) => {
+      if (a.slug === "main-guide") return -1;
+      if (b.slug === "main-guide") return 1;
+      return a.title.localeCompare(b.title, "zh-CN");
+    });
 }
 
 export function getArticle(slug: string) {

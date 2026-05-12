@@ -68,7 +68,12 @@ export function WikiHome({ articles, entries }: WikiHomeProps) {
             key={article.slug}
             style={{ animationDelay: `${i * 60}ms` }}
           >
-            <h3>{article.title}</h3>
+            <h3>
+              {article.slug === "main-guide" && (
+                <span className="pin-badge">置顶</span>
+              )}
+              {article.title}
+            </h3>
             <p>{article.excerpt}</p>
             <span className="read-link">阅读全文 →</span>
           </Link>

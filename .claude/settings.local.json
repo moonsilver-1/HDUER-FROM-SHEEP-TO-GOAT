@@ -8,7 +8,13 @@
       "Bash(Start-Sleep -Seconds 4)",
       "Bash(curl -s http://localhost:3001)",
       "Bash(Select-String -Pattern \"杭电百科|contributors|article\")",
-      "Bash(Select-Object -First 10)"
+      "Bash(Select-Object -First 10)",
+      "Bash(npm run *)",
+      "Bash(timeout 8)",
+      "Bash(curl *)",
+      "Bash(Start-Sleep -Seconds 5)",
+      "Bash(Get-Content \"C:\\\\Users\\\\USER\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--coding-hdu-sheep2goat-HDUER-FROM-SHEEP-TO-GOAT\\\\05649bd7-b05d-48cb-a77e-4e0cc8a222a9\\\\tasks\\\\bz5o06wxb.output\")",
+      "PowerShell(taskkill *)"
     ]
   }
 }
