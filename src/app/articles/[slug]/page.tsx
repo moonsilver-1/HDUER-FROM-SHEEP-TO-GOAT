@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getArticle, getArticles } from "@/lib/content";
-import { MarkdownView } from "@/lib/markdown";
+import { ArticleContent } from "@/components/article-content";
 
 export function generateStaticParams() {
   return getArticles().map((article) => ({ slug: article.slug }));
@@ -22,11 +22,14 @@ export async function generateMetadata({
 }
 
 export default async function ArticlePage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
   const { slug } = await params;
+  const { q } = await searchParams;
   const article = getArticle(slug);
 
   if (!article) {
@@ -39,7 +42,7 @@ export default async function ArticlePage({
         返回杭电百科
       </Link>
       <article className="article-card">
-        <MarkdownView content={article.content} />
+        <ArticleContent content={article.content} highlight={q} />
       </article>
     </main>
   );

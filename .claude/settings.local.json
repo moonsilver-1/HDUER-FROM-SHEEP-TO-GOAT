@@ -3,7 +3,12 @@
     "allow": [
       "Bash(mkdir articles *)",
       "Bash(mkdir entries *)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(npx next *)",
+      "Bash(Start-Sleep -Seconds 4)",
+      "Bash(curl -s http://localhost:3001)",
+      "Bash(Select-String -Pattern \"杭电百科|contributors|article\")",
+      "Bash(Select-Object -First 10)"
     ]
   }
 }
