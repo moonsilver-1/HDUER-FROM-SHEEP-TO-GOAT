@@ -9,7 +9,7 @@ type WikiHomeProps = {
   entries: WikiEntry[];
 };
 
-const contributors = ["moonsilver", "如山", "09", "langji", "hina_daisuki"];
+const contributors = ["moonsilver", "如山", "09", "langji", "hina_daisuki", "Miss", "blair", "东风揽月", "Zkaqtch"];
 
 export function WikiHome({ articles, entries }: WikiHomeProps) {
   const [query, setQuery] = useState("");

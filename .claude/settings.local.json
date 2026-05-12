@@ -14,7 +14,8 @@
       "Bash(curl *)",
       "Bash(Start-Sleep -Seconds 5)",
       "Bash(Get-Content \"C:\\\\Users\\\\USER\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--coding-hdu-sheep2goat-HDUER-FROM-SHEEP-TO-GOAT\\\\05649bd7-b05d-48cb-a77e-4e0cc8a222a9\\\\tasks\\\\bz5o06wxb.output\")",
-      "PowerShell(taskkill *)"
+      "PowerShell(taskkill *)",
+      "Bash(Start-Process *)"
     ]
   }
 }
