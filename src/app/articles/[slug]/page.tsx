@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getArticle, getArticles } from "@/lib/content";
 import { ArticleContent } from "@/components/article-content";
+import { ArticleAuthGate } from "@/components/article-auth-gate";
 
 export function generateStaticParams() {
   return getArticles().map((article) => ({ slug: article.slug }));
@@ -41,9 +42,11 @@ export default async function ArticlePage({
       <Link className="back-link" href="/">
         返回杭电百科
       </Link>
-      <article className="article-card">
-        <ArticleContent content={article.content} highlight={q} />
-      </article>
+      <ArticleAuthGate>
+        <article className="article-card">
+          <ArticleContent content={article.content} highlight={q} />
+        </article>
+      </ArticleAuthGate>
     </main>
   );
 }

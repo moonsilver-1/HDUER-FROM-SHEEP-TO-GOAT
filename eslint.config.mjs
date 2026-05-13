@@ -2,7 +2,7 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 
 const eslintConfig = [
   {
-    ignores: [".next/**", "node_modules/**", ".reference-cuddly-lamp/**"]
+    ignores: [".next/**", "node_modules/**", ".npm-cache/**", ".reference-cuddly-lamp/**"]
   },
   ...nextVitals
 ];
