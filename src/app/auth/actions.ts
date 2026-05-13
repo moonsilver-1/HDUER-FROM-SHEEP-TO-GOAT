@@ -293,18 +293,42 @@ export async function submitContributionAction(
     return { ok: false, message: "账号不存在，请重新登录。" };
   }
 
-  await sql`
-    INSERT INTO contributions (account_id, type, title, signature, content, status)
-    VALUES (${account.id}, ${type}, ${title}, ${signature}, ${content}, 'pending')
-  `;
+  const status = session.role === "admin" ? "approved" : "pending";
+  const insertedRows = (await sql`
+    INSERT INTO contributions (account_id, type, title, signature, content, status, reviewed_at)
+    VALUES (
+      ${account.id},
+      ${type},
+      ${title},
+      ${signature},
+      ${content},
+      ${status},
+      ${status === "approved" ? sql`NOW()` : null}
+    )
+    RETURNING id
+  `) as { id: number }[];
+  const contributionId = insertedRows[0]?.id;
+
+  if (status === "approved" && type === "article" && contributionId) {
+    const slug = await uniqueArticleSlug(title, contributionId);
+    await sql`
+      UPDATE contributions
+      SET slug = ${slug}
+      WHERE id = ${contributionId}
+    `;
+  }
 
   if (!session.accountId) {
     await setCurrentSession({ ...session, accountId: account.id });
   }
 
+  revalidatePath("/");
   revalidatePath("/profile");
   revalidatePath("/contribute");
-  return { ok: true, message: "投稿已提交，等待管理员审核。" };
+  return {
+    ok: true,
+    message: session.role === "admin" ? "投稿已发布。" : "投稿已提交，等待管理员审核。"
+  };
 }
 
 export async function requestUsernameChangeAction(

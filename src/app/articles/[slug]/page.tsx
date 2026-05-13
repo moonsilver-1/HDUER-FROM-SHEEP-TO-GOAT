@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getArticle, getArticles } from "@/lib/content";
 import { ArticleContent } from "@/components/article-content";
 
+export const dynamic = "force-dynamic";
+
 export async function generateStaticParams() {
   return (await getArticles()).map((article) => ({ slug: article.slug }));
 }

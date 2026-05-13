@@ -35,6 +35,22 @@ export function WikiHome({ articles, entries }: WikiHomeProps) {
       .slice(0, 6);
   }, [entries, normalizedQuery]);
 
+  const filteredEntries = useMemo(() => {
+    if (!normalizedQuery) return [];
+    return entries.filter((entry) => {
+      const haystack = [
+        entry.term,
+        ...entry.aliases,
+        entry.summary,
+        ...entry.details
+      ]
+        .join("\n")
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [entries, normalizedQuery]);
+
   return (
     <main className="home-shell">
       <section className="hero">
@@ -60,6 +76,24 @@ export function WikiHome({ articles, entries }: WikiHomeProps) {
         </div>
       </section>
 
+      {normalizedQuery && filteredEntries.length > 0 && (
+        <section className="entries-results">
+          {filteredEntries.map((entry) => (
+            <article className="entry-result-item" key={entry.term}>
+              <h3>{entry.term}</h3>
+              <p>{entry.summary}</p>
+              {entry.details.length > 0 && (
+                <ul>
+                  {entry.details.slice(0, 3).map((detail) => (
+                    <li key={detail}>{detail}</li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          ))}
+        </section>
+      )}
+
       <section className="articles-grid">
         {filteredArticles.map((article, i) => (
           <Link
@@ -80,7 +114,7 @@ export function WikiHome({ articles, entries }: WikiHomeProps) {
         ))}
         {filteredArticles.length === 0 && (
           <div className="empty-state">
-            <p>没有找到匹配的文章</p>
+            <p>{filteredEntries.length > 0 ? "没有找到匹配的文章" : "没有找到匹配的内容"}</p>
           </div>
         )}
       </section>

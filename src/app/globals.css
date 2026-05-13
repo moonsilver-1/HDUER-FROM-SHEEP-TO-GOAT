@@ -596,6 +596,43 @@ textarea {
 
 /* ── Articles Grid ── */
 
+.entries-results {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.entry-result-item {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  background: var(--surface);
+  animation: cardIn 0.45s var(--ease) forwards;
+}
+
+.entry-result-item h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.entry-result-item p,
+.entry-result-item li {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.entry-result-item p {
+  margin: 0;
+}
+
+.entry-result-item ul {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding-left: 1.1rem;
+}
+
 .articles-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
