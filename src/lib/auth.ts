@@ -12,6 +12,7 @@ export type Session = {
 
 export type PendingAccount = {
   username: string;
+  studentId: string | null;
   createdAt: string;
 };
 
@@ -114,6 +115,7 @@ export async function ensureAuthSchema() {
       CREATE TABLE IF NOT EXISTS accounts (
         id SERIAL PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
+        student_id TEXT,
         password_hash TEXT NOT NULL,
         salt TEXT NOT NULL,
         role TEXT NOT NULL CHECK (role IN ('admin', 'visitor')),
@@ -122,6 +124,7 @@ export async function ensureAuthSchema() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS student_id TEXT`;
     schemaReady = true;
   }
 
@@ -180,14 +183,15 @@ export async function listPendingAccounts(): Promise<PendingAccount[]> {
   await ensureAuthSchema();
   const sql = getSql();
   const rows = (await sql`
-    SELECT username, created_at
+    SELECT username, student_id, created_at
     FROM accounts
     WHERE role = 'visitor' AND status = 'pending'
     ORDER BY created_at ASC
-  `) as { username: string; created_at: string }[];
+  `) as { username: string; student_id: string | null; created_at: string }[];
 
   return rows.map((row) => ({
     username: row.username,
+    studentId: row.student_id,
     createdAt: new Date(row.created_at).toLocaleString("zh-CN")
   }));
 }

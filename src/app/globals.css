@@ -30,6 +30,80 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.account-nav {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  z-index: 20;
+}
+
+.account-login-link,
+.account-menu summary {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(5, 5, 5, 0.72);
+  color: var(--muted);
+  padding: 6px 13px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+
+.account-login-link:hover,
+.account-menu summary:hover {
+  border-color: var(--border-hover);
+  color: var(--fg);
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu summary {
+  list-style: none;
+}
+
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 128px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(8, 8, 8, 0.96);
+  padding: 6px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.account-dropdown a,
+.account-dropdown button {
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  display: block;
+  padding: 8px 9px;
+  text-align: left;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.account-dropdown a:hover,
+.account-dropdown button:hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
 ::selection {
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
@@ -315,6 +389,177 @@ input {
 
 .auth-message {
   margin: 12px 0 0;
+}
+
+/* Auth Pages */
+
+.auth-page,
+.profile-page {
+  width: min(520px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 72px 0 42px;
+}
+
+.minimal-auth-card,
+.profile-head,
+.profile-section {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.minimal-auth-card {
+  padding: 28px;
+}
+
+.minimal-auth-card h1,
+.profile-head h1,
+.profile-section h2 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.minimal-auth-card h1 {
+  margin-bottom: 18px;
+  font-size: 1.25rem;
+}
+
+.minimal-auth-form,
+.profile-form {
+  display: grid;
+  gap: 13px;
+}
+
+.minimal-auth-form label,
+.profile-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.minimal-auth-form input,
+.profile-form input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--fg);
+  padding: 10px 12px;
+  outline: none;
+}
+
+.minimal-auth-form input:focus,
+.profile-form input:focus {
+  border-color: var(--border-hover);
+}
+
+.minimal-auth-form button,
+.profile-form button,
+.review-buttons button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 13px;
+}
+
+.minimal-auth-form button:disabled,
+.profile-form button:disabled,
+.review-buttons button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.auth-switch,
+.form-error,
+.form-success {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.auth-switch {
+  color: var(--muted);
+  text-align: center;
+}
+
+.auth-switch a,
+.form-success {
+  color: var(--accent);
+}
+
+.form-error {
+  color: #ff9c8a;
+}
+
+/* Profile */
+
+.profile-page {
+  width: min(720px, calc(100% - 32px));
+}
+
+.profile-head {
+  padding: 24px;
+}
+
+.profile-head p {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.profile-head h1 {
+  font-size: 1.4rem;
+}
+
+.profile-section {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 22px;
+}
+
+.profile-section h2 {
+  font-size: 1rem;
+}
+
+.pending-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pending-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.pending-row > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.pending-row span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.review-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.review-buttons button:last-child {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
 }
 
 /* ── Articles Grid ── */

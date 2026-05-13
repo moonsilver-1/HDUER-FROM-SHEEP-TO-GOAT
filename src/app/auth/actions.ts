@@ -25,12 +25,18 @@ export type AuthSnapshot = {
   pendingAccounts: PendingAccount[];
 };
 
+const initialMessage = { ok: false, message: "" };
+
 function cleanUsername(value: FormDataEntryValue | null) {
   return String(value || "").trim();
 }
 
 function cleanPassword(value: FormDataEntryValue | null) {
   return String(value || "");
+}
+
+function cleanStudentId(value: FormDataEntryValue | null) {
+  return String(value || "").trim();
 }
 
 function validateUsername(username: string) {
@@ -49,11 +55,13 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
 }
 
 export async function registerAction(
-  _previousState: AuthActionState,
+  _previousState: AuthActionState = initialMessage,
   formData: FormData
 ): Promise<AuthActionState> {
   const username = cleanUsername(formData.get("username"));
   const password = cleanPassword(formData.get("password"));
+  const confirmPassword = cleanPassword(formData.get("confirmPassword"));
+  const studentId = cleanStudentId(formData.get("studentId"));
 
   if (!validateUsername(username)) {
     return { ok: false, message: "账号需为 3-20 位字母、数字或下划线。" };
@@ -63,25 +71,34 @@ export async function registerAction(
     return { ok: false, message: "密码至少需要 6 位。" };
   }
 
+  if (password !== confirmPassword) {
+    return { ok: false, message: "两次输入的密码不一致。" };
+  }
+
+  if (!/^\d{6,20}$/.test(studentId)) {
+    return { ok: false, message: "学号需为 6-20 位数字。" };
+  }
+
   await ensureAuthSchema();
   const sql = getAuthSql();
   const { salt, hash } = createPasswordRecord(password);
 
   try {
     await sql`
-      INSERT INTO accounts (username, password_hash, salt, role, status)
-      VALUES (${username}, ${hash}, ${salt}, 'visitor', 'pending')
+      INSERT INTO accounts (username, student_id, password_hash, salt, role, status)
+      VALUES (${username}, ${studentId}, ${hash}, ${salt}, 'visitor', 'pending')
     `;
   } catch {
     return { ok: false, message: "该账号已存在。" };
   }
 
   revalidatePath("/");
+  revalidatePath("/profile");
   return { ok: true, message: "注册成功，等待管理员审核后即可登录。" };
 }
 
 export async function loginAction(
-  _previousState: AuthActionState,
+  _previousState: AuthActionState = initialMessage,
   formData: FormData
 ): Promise<AuthActionState> {
   const username = cleanUsername(formData.get("username"));
@@ -119,17 +136,23 @@ export async function loginAction(
 
   await setCurrentSession({ username: account.username, role: account.role });
   revalidatePath("/");
+  revalidatePath("/profile");
   return { ok: true, message: "登录成功。" };
 }
 
 export async function logoutAction(): Promise<AuthActionState> {
   await setCurrentSession(null);
   revalidatePath("/");
+  revalidatePath("/profile");
   return { ok: true, message: "已退出登录。" };
 }
 
+export async function logoutFormAction(): Promise<void> {
+  await logoutAction();
+}
+
 export async function changePasswordAction(
-  _previousState: AuthActionState,
+  _previousState: AuthActionState = initialMessage,
   formData: FormData
 ): Promise<AuthActionState> {
   const session = await getCurrentSession();
@@ -190,5 +213,6 @@ export async function reviewAccountAction(formData: FormData): Promise<AuthActio
   `;
 
   revalidatePath("/");
+  revalidatePath("/profile");
   return { ok: true, message: `${username} 已${status === "approved" ? "通过" : "拒绝"}审核。` };
 }

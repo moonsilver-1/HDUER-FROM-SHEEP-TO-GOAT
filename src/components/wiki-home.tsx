@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
-import { AuthPanel } from "@/components/auth-panel";
 import type { Article, WikiEntry } from "@/lib/content";
 
 type WikiHomeProps = {
@@ -60,8 +59,6 @@ export function WikiHome({ articles, entries }: WikiHomeProps) {
           </div>
         </div>
       </section>
-
-      <AuthPanel />
 
       <section className="articles-grid">
         {filteredArticles.map((article, i) => (
