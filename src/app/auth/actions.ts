@@ -2,17 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  type ContributionType,
   createPasswordRecord,
   databaseAvailable,
   ensureAuthSchema,
   getAuthSql,
   getCurrentSession,
   listPendingAccounts,
+  listPendingContributions,
+  listPendingUsernameChanges,
   passwordMatches,
   setCurrentSession,
+  type PendingContribution,
   type PendingAccount,
+  type PendingUsernameChange,
   type Session
 } from "@/lib/auth";
+import { getArticles } from "@/lib/content";
 
 export type AuthActionState = {
   ok: boolean;
@@ -23,6 +29,8 @@ export type AuthSnapshot = {
   databaseReady: boolean;
   session: Session | null;
   pendingAccounts: PendingAccount[];
+  pendingUsernameChanges: PendingUsernameChange[];
+  pendingContributions: PendingContribution[];
 };
 
 const initialMessage = { ok: false, message: "" };
@@ -43,15 +51,53 @@ function validateUsername(username: string) {
   return /^[a-zA-Z0-9_]{3,20}$/.test(username);
 }
 
+function cleanText(value: FormDataEntryValue | null) {
+  return String(value || "").trim();
+}
+
+function slugify(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
+
+  return slug || "contribution";
+}
+
+async function uniqueArticleSlug(title: string, id: number) {
+  const base = slugify(title);
+  const existingSlugs = new Set((await getArticles()).map((article) => article.slug));
+
+  return existingSlugs.has(base) ? `${base}-${id}` : base;
+}
+
 export async function getAuthSnapshot(): Promise<AuthSnapshot> {
   if (!databaseAvailable()) {
-    return { databaseReady: false, session: null, pendingAccounts: [] };
+    return {
+      databaseReady: false,
+      session: null,
+      pendingAccounts: [],
+      pendingUsernameChanges: [],
+      pendingContributions: []
+    };
   }
 
   const session = await getCurrentSession();
   const pendingAccounts = session?.role === "admin" ? await listPendingAccounts() : [];
+  const pendingUsernameChanges =
+    session?.role === "admin" ? await listPendingUsernameChanges() : [];
+  const pendingContributions =
+    session?.role === "admin" ? await listPendingContributions() : [];
 
-  return { databaseReady: true, session, pendingAccounts };
+  return {
+    databaseReady: true,
+    session,
+    pendingAccounts,
+    pendingUsernameChanges,
+    pendingContributions
+  };
 }
 
 export async function registerAction(
@@ -107,11 +153,12 @@ export async function loginAction(
   await ensureAuthSchema();
   const sql = getAuthSql();
   const rows = (await sql`
-    SELECT username, password_hash, salt, role, status
+    SELECT id, username, password_hash, salt, role, status
     FROM accounts
     WHERE username = ${username}
     LIMIT 1
   `) as {
+    id: number;
     username: string;
     password_hash: string;
     salt: string;
@@ -134,7 +181,11 @@ export async function loginAction(
     };
   }
 
-  await setCurrentSession({ username: account.username, role: account.role });
+  await setCurrentSession({
+    accountId: account.id,
+    username: account.username,
+    role: account.role
+  });
   revalidatePath("/");
   revalidatePath("/profile");
   return { ok: true, message: "登录成功。" };
@@ -191,6 +242,148 @@ export async function changePasswordAction(
   return { ok: true, message: "密码已修改。" };
 }
 
+export async function submitContributionAction(
+  _previousState: AuthActionState = initialMessage,
+  formData: FormData
+): Promise<AuthActionState> {
+  const session = await getCurrentSession();
+  const type = String(formData.get("type")) as ContributionType;
+  const title = cleanText(formData.get("title"));
+  const signature = cleanText(formData.get("signature"));
+  const content = cleanText(formData.get("content"));
+
+  if (!session) {
+    return { ok: false, message: "请先登录后再投稿。" };
+  }
+
+  if (type !== "article" && type !== "entry") {
+    return { ok: false, message: "投稿类型无效。" };
+  }
+
+  if (title.length < 2 || title.length > 80) {
+    return { ok: false, message: "标题需为 2-80 个字符。" };
+  }
+
+  if (signature.length < 1 || signature.length > 40) {
+    return { ok: false, message: "署名需为 1-40 个字符。" };
+  }
+
+  if (content.length < 20 || content.length > 20000) {
+    return { ok: false, message: "内容需为 20-20000 个字符。" };
+  }
+
+  await ensureAuthSchema();
+  const sql = getAuthSql();
+  const accountRows = session.accountId
+    ? ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE id = ${session.accountId}
+        LIMIT 1
+      `) as { id: number }[])
+    : ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE username = ${session.username}
+        LIMIT 1
+      `) as { id: number }[]);
+  const account = accountRows[0];
+
+  if (!account) {
+    return { ok: false, message: "账号不存在，请重新登录。" };
+  }
+
+  await sql`
+    INSERT INTO contributions (account_id, type, title, signature, content, status)
+    VALUES (${account.id}, ${type}, ${title}, ${signature}, ${content}, 'pending')
+  `;
+
+  if (!session.accountId) {
+    await setCurrentSession({ ...session, accountId: account.id });
+  }
+
+  revalidatePath("/profile");
+  revalidatePath("/contribute");
+  return { ok: true, message: "投稿已提交，等待管理员审核。" };
+}
+
+export async function requestUsernameChangeAction(
+  _previousState: AuthActionState = initialMessage,
+  formData: FormData
+): Promise<AuthActionState> {
+  const session = await getCurrentSession();
+  const requestedUsername = cleanUsername(formData.get("newUsername"));
+
+  if (!session) {
+    return { ok: false, message: "请先登录。" };
+  }
+
+  if (!validateUsername(requestedUsername)) {
+    return { ok: false, message: "新用户名需为 3-20 位字母、数字或下划线。" };
+  }
+
+  if (requestedUsername === session.username) {
+    return { ok: false, message: "新用户名不能和当前用户名相同。" };
+  }
+
+  await ensureAuthSchema();
+  const sql = getAuthSql();
+  const accountRows = session.accountId
+    ? ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE id = ${session.accountId}
+        LIMIT 1
+      `) as { id: number }[])
+    : ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE username = ${session.username}
+        LIMIT 1
+      `) as { id: number }[]);
+  const account = accountRows[0];
+
+  if (!account) {
+    return { ok: false, message: "账号不存在，请重新登录。" };
+  }
+
+  const existingRows = (await sql`
+    SELECT id
+    FROM accounts
+    WHERE username = ${requestedUsername} AND id <> ${account.id}
+    LIMIT 1
+  `) as { id: number }[];
+
+  if (existingRows.length > 0) {
+    return { ok: false, message: "该用户名已被使用。" };
+  }
+
+  const pendingRows = (await sql`
+    SELECT id
+    FROM username_change_requests
+    WHERE requested_username = ${requestedUsername} AND status = 'pending' AND account_id <> ${account.id}
+    LIMIT 1
+  `) as { id: number }[];
+
+  if (pendingRows.length > 0) {
+    return { ok: false, message: "该用户名已有待审核申请。" };
+  }
+
+  await sql`
+    INSERT INTO username_change_requests (account_id, requested_username, status)
+    VALUES (${account.id}, ${requestedUsername}, 'pending')
+    ON CONFLICT (account_id) WHERE status = 'pending'
+    DO UPDATE SET requested_username = EXCLUDED.requested_username, created_at = NOW()
+  `;
+
+  if (!session.accountId) {
+    await setCurrentSession({ ...session, accountId: account.id });
+  }
+
+  revalidatePath("/profile");
+  return { ok: true, message: "用户名修改申请已提交，等待管理员审核。" };
+}
+
 export async function reviewAccountAction(formData: FormData): Promise<AuthActionState> {
   const session = await getCurrentSession();
   const username = cleanUsername(formData.get("username"));
@@ -215,4 +408,145 @@ export async function reviewAccountAction(formData: FormData): Promise<AuthActio
   revalidatePath("/");
   revalidatePath("/profile");
   return { ok: true, message: `${username} 已${status === "approved" ? "通过" : "拒绝"}审核。` };
+}
+
+export async function reviewUsernameChangeAction(formData: FormData): Promise<AuthActionState> {
+  const session = await getCurrentSession();
+  const requestId = Number(formData.get("requestId"));
+  const status = String(formData.get("status"));
+
+  if (session?.role !== "admin") {
+    return { ok: false, message: "只有管理员可以审核用户名修改。" };
+  }
+
+  if (!Number.isInteger(requestId) || requestId <= 0) {
+    return { ok: false, message: "申请不存在。" };
+  }
+
+  if (status !== "approved" && status !== "rejected") {
+    return { ok: false, message: "审核状态无效。" };
+  }
+
+  await ensureAuthSchema();
+  const sql = getAuthSql();
+  const reviewerRows = session.accountId
+    ? ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE id = ${session.accountId}
+        LIMIT 1
+      `) as { id: number }[])
+    : ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE username = ${session.username}
+        LIMIT 1
+      `) as { id: number }[]);
+  const reviewer = reviewerRows[0];
+
+  if (!reviewer) {
+    return { ok: false, message: "审核账号不存在，请重新登录。" };
+  }
+
+  const requestRows = (await sql`
+    SELECT id, account_id, requested_username
+    FROM username_change_requests
+    WHERE id = ${requestId} AND status = 'pending'
+    LIMIT 1
+  `) as { id: number; account_id: number; requested_username: string }[];
+  const request = requestRows[0];
+
+  if (!request) {
+    return { ok: false, message: "申请不存在或已审核。" };
+  }
+
+  if (reviewer.id === request.account_id) {
+    return { ok: false, message: "不能审核自己的用户名修改申请。" };
+  }
+
+  if (status === "approved") {
+    const existingRows = (await sql`
+      SELECT id
+      FROM accounts
+      WHERE username = ${request.requested_username} AND id <> ${request.account_id}
+      LIMIT 1
+    `) as { id: number }[];
+
+    if (existingRows.length > 0) {
+      await sql`
+        UPDATE username_change_requests
+        SET status = 'rejected', reviewed_at = NOW()
+        WHERE id = ${request.id}
+      `;
+      revalidatePath("/profile");
+      return { ok: false, message: "该用户名已被占用，申请已自动拒绝。" };
+    }
+
+    await sql`
+      UPDATE accounts
+      SET username = ${request.requested_username}, updated_at = NOW()
+      WHERE id = ${request.account_id}
+    `;
+  }
+
+  await sql`
+    UPDATE username_change_requests
+    SET status = ${status}, reviewed_at = NOW()
+    WHERE id = ${request.id}
+  `;
+
+  revalidatePath("/");
+  revalidatePath("/profile");
+  return { ok: true, message: `用户名修改已${status === "approved" ? "通过" : "拒绝"}。` };
+}
+
+export async function reviewContributionAction(formData: FormData): Promise<AuthActionState> {
+  const session = await getCurrentSession();
+  const contributionId = Number(formData.get("contributionId"));
+  const status = String(formData.get("status"));
+
+  if (session?.role !== "admin") {
+    return { ok: false, message: "只有管理员可以审核投稿。" };
+  }
+
+  if (!Number.isInteger(contributionId) || contributionId <= 0) {
+    return { ok: false, message: "投稿不存在。" };
+  }
+
+  if (status !== "approved" && status !== "rejected") {
+    return { ok: false, message: "审核状态无效。" };
+  }
+
+  await ensureAuthSchema();
+  const sql = getAuthSql();
+  const contributionRows = (await sql`
+    SELECT id, type, title
+    FROM contributions
+    WHERE id = ${contributionId} AND status = 'pending'
+    LIMIT 1
+  `) as { id: number; type: ContributionType; title: string }[];
+  const contribution = contributionRows[0];
+
+  if (!contribution) {
+    return { ok: false, message: "投稿不存在或已审核。" };
+  }
+
+  const slug =
+    status === "approved" && contribution.type === "article"
+      ? await uniqueArticleSlug(contribution.title, contribution.id)
+      : null;
+
+  await sql`
+    UPDATE contributions
+    SET status = ${status}, slug = ${slug}, reviewed_at = NOW()
+    WHERE id = ${contribution.id}
+  `;
+
+  revalidatePath("/");
+  revalidatePath("/profile");
+  if (slug) {
+    revalidatePath(`/articles/${slug}`);
+  }
+
+  return { ok: true, message: `投稿已${status === "approved" ? "通过" : "拒绝"}。` };
 }

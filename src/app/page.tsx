@@ -1,6 +1,8 @@
 import { WikiHome } from "@/components/wiki-home";
-import { getArticles, wikiEntries } from "@/lib/content";
+import { getArticles, getWikiEntries } from "@/lib/content";
 
-export default function Home() {
-  return <WikiHome articles={getArticles()} entries={wikiEntries} />;
+export default async function Home() {
+  const [articles, entries] = await Promise.all([getArticles(), getWikiEntries()]);
+
+  return <WikiHome articles={articles} entries={entries} />;
 }

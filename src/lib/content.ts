@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { databaseAvailable, ensureAuthSchema, getAuthSql } from "@/lib/auth";
 
 export type Article = {
   slug: string;
@@ -17,7 +18,7 @@ export type WikiEntry = {
 
 const articlesDirectory = path.join(process.cwd(), "articles");
 
-export const wikiEntries: WikiEntry[] = [
+const staticWikiEntries: WikiEntry[] = [
   {
     term: "绩点",
     aliases: ["GPA", "平均学分绩点", "裸绩点", "满绩"],
@@ -84,6 +85,8 @@ export const wikiEntries: WikiEntry[] = [
   }
 ];
 
+export const wikiEntries: WikiEntry[] = staticWikiEntries;
+
 function titleFromMarkdown(content: string, fallback: string) {
   const heading = content
     .split(/\r?\n/)
@@ -108,7 +111,7 @@ function excerptFromMarkdown(content: string) {
   return paragraph ? `${paragraph.slice(0, 118)}...` : "来自 HDU 学长学姐的经验文章。";
 }
 
-export function getArticles(): Article[] {
+function getStaticArticles(): Article[] {
   if (!fs.existsSync(articlesDirectory)) {
     return [];
   }
@@ -134,6 +137,74 @@ export function getArticles(): Article[] {
     });
 }
 
-export function getArticle(slug: string) {
-  return getArticles().find((article) => article.slug === slug);
+function entryFromContribution(title: string, content: string): WikiEntry {
+  const blocks = content
+    .split(/\r?\n\r?\n/)
+    .map((block) => block.replace(/^#+\s+/gm, "").trim())
+    .filter(Boolean);
+  const [summary = content.slice(0, 100), ...details] = blocks;
+
+  return {
+    term: title,
+    aliases: [],
+    summary,
+    details
+  };
+}
+
+async function getApprovedContributionRows() {
+  if (!databaseAvailable()) {
+    return [];
+  }
+
+  try {
+    await ensureAuthSchema();
+    const sql = getAuthSql();
+    return (await sql`
+      SELECT type, title, signature, content, slug
+      FROM contributions
+      WHERE status = 'approved'
+      ORDER BY reviewed_at DESC NULLS LAST, created_at DESC
+    `) as {
+      type: "article" | "entry";
+      title: string;
+      signature: string;
+      content: string;
+      slug: string | null;
+    }[];
+  } catch {
+    return [];
+  }
+}
+
+export async function getArticles(): Promise<Article[]> {
+  const staticArticles = getStaticArticles();
+  const rows = await getApprovedContributionRows();
+  const contributionArticles = rows
+    .filter((row) => row.type === "article" && row.slug)
+    .map((row) => {
+      const content = `# ${row.title}\n\n作者：${row.signature}\n\n${row.content}`;
+
+      return {
+        slug: row.slug as string,
+        title: row.title,
+        excerpt: excerptFromMarkdown(content),
+        content
+      };
+    });
+
+  return [...staticArticles, ...contributionArticles];
+}
+
+export async function getWikiEntries(): Promise<WikiEntry[]> {
+  const rows = await getApprovedContributionRows();
+  const contributionEntries = rows
+    .filter((row) => row.type === "entry")
+    .map((row) => entryFromContribution(row.title, row.content));
+
+  return [...staticWikiEntries, ...contributionEntries];
+}
+
+export async function getArticle(slug: string) {
+  return (await getArticles()).find((article) => article.slug === slug);
 }

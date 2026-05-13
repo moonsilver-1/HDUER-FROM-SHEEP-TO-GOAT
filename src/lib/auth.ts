@@ -6,6 +6,7 @@ export type AccountRole = "admin" | "visitor";
 export type AccountStatus = "approved" | "pending" | "rejected";
 
 export type Session = {
+  accountId?: number;
   username: string;
   role: AccountRole;
 };
@@ -13,6 +14,24 @@ export type Session = {
 export type PendingAccount = {
   username: string;
   studentId: string | null;
+  createdAt: string;
+};
+
+export type PendingUsernameChange = {
+  id: number;
+  currentUsername: string;
+  requestedUsername: string;
+  createdAt: string;
+};
+
+export type ContributionType = "article" | "entry";
+export type PendingContribution = {
+  id: number;
+  type: ContributionType;
+  title: string;
+  signature: string;
+  content: string;
+  authorUsername: string;
   createdAt: string;
 };
 
@@ -96,7 +115,8 @@ function decodeSession(value?: string): Session | null {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     if (
       typeof parsed.username === "string" &&
-      (parsed.role === "admin" || parsed.role === "visitor")
+      (parsed.role === "admin" || parsed.role === "visitor") &&
+      (typeof parsed.accountId === "undefined" || typeof parsed.accountId === "number")
     ) {
       return parsed;
     }
@@ -125,6 +145,35 @@ export async function ensureAuthSchema() {
       )
     `;
     await sql`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS student_id TEXT`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS username_change_requests (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        requested_username TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reviewed_at TIMESTAMPTZ
+      )
+    `;
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS username_change_requests_one_pending_per_account
+      ON username_change_requests(account_id)
+      WHERE status = 'pending'
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS contributions (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('article', 'entry')),
+        title TEXT NOT NULL,
+        signature TEXT NOT NULL,
+        content TEXT NOT NULL,
+        slug TEXT UNIQUE,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reviewed_at TIMESTAMPTZ
+      )
+    `;
     schemaReady = true;
   }
 
@@ -142,7 +191,32 @@ export async function ensureAuthSchema() {
 
 export async function getCurrentSession() {
   const store = await cookies();
-  return decodeSession(store.get(SESSION_COOKIE)?.value);
+  const session = decodeSession(store.get(SESSION_COOKIE)?.value);
+
+  if (!session?.accountId || !databaseAvailable()) {
+    return session;
+  }
+
+  await ensureAuthSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT id, username, role, status
+    FROM accounts
+    WHERE id = ${session.accountId}
+    LIMIT 1
+  `) as {
+    id: number;
+    username: string;
+    role: AccountRole;
+    status: AccountStatus;
+  }[];
+  const account = rows[0];
+
+  if (!account || account.status !== "approved") {
+    return null;
+  }
+
+  return { accountId: account.id, username: account.username, role: account.role };
 }
 
 export async function setCurrentSession(session: Session | null) {
@@ -192,6 +266,71 @@ export async function listPendingAccounts(): Promise<PendingAccount[]> {
   return rows.map((row) => ({
     username: row.username,
     studentId: row.student_id,
+    createdAt: new Date(row.created_at).toLocaleString("zh-CN")
+  }));
+}
+
+export async function listPendingUsernameChanges(): Promise<PendingUsernameChange[]> {
+  await ensureAuthSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      requests.id,
+      accounts.username,
+      requests.requested_username,
+      requests.created_at
+    FROM username_change_requests requests
+    JOIN accounts ON accounts.id = requests.account_id
+    WHERE requests.status = 'pending'
+    ORDER BY requests.created_at ASC
+  `) as {
+    id: number;
+    username: string;
+    requested_username: string;
+    created_at: string;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    currentUsername: row.username,
+    requestedUsername: row.requested_username,
+    createdAt: new Date(row.created_at).toLocaleString("zh-CN")
+  }));
+}
+
+export async function listPendingContributions(): Promise<PendingContribution[]> {
+  await ensureAuthSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      contributions.id,
+      contributions.type,
+      contributions.title,
+      contributions.signature,
+      contributions.content,
+      contributions.created_at,
+      accounts.username
+    FROM contributions
+    JOIN accounts ON accounts.id = contributions.account_id
+    WHERE contributions.status = 'pending'
+    ORDER BY contributions.created_at ASC
+  `) as {
+    id: number;
+    type: ContributionType;
+    title: string;
+    signature: string;
+    content: string;
+    created_at: string;
+    username: string;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    signature: row.signature,
+    content: row.content,
+    authorUsername: row.username,
     createdAt: new Date(row.created_at).toLocaleString("zh-CN")
   }));
 }

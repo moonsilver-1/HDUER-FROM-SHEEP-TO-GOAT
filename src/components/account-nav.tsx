@@ -12,6 +12,7 @@ export async function AccountNav() {
           <summary>{session.username}</summary>
           <div className="account-dropdown">
             <Link href="/profile">个人主页</Link>
+            <Link href="/contribute">投稿</Link>
             <form action={logoutFormAction}>
               <button type="submit">退出登录</button>
             </form>

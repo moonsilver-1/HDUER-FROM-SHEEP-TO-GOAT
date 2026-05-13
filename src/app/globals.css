@@ -115,7 +115,9 @@ a {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -440,7 +442,9 @@ input {
 }
 
 .minimal-auth-form input,
-.profile-form input {
+.profile-form input,
+.profile-form select,
+.profile-form textarea {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -450,9 +454,21 @@ input {
   outline: none;
 }
 
+.profile-form textarea {
+  min-height: 240px;
+  resize: vertical;
+}
+
 .minimal-auth-form input:focus,
-.profile-form input:focus {
+.profile-form input:focus,
+.profile-form select:focus,
+.profile-form textarea:focus {
   border-color: var(--border-hover);
+}
+
+.profile-form select option {
+  background: #080808;
+  color: var(--fg);
 }
 
 .minimal-auth-form button,
@@ -544,11 +560,27 @@ input {
 .pending-row > div:first-child {
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
 .pending-row span {
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.pending-row-tall {
+  align-items: flex-start;
+}
+
+.pending-row-tall p {
+  display: -webkit-box;
+  max-width: 100%;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.82rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .review-buttons {
