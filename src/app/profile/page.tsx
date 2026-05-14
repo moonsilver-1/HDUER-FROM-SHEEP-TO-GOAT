@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import {
   ChangePasswordForm,
   ChangeUsernameForm,
+  DeleteContentForm,
+  EditContentForm,
   ReviewButtons,
   ReviewContributionButtons,
   ReviewUsernameChangeButtons
@@ -13,10 +15,19 @@ import {
   listPendingContributions,
   listPendingUsernameChanges
 } from "@/lib/auth";
+import { getArticles, getWikiEntries } from "@/lib/content";
 
 export const metadata = {
   title: "个人主页 | HDU Wiki"
 };
+
+function editableArticleContent(content: string) {
+  return content.replace(/^# .*(\r?\n){1,2}/, "").trim();
+}
+
+function editableEntryContent(summary: string, details: string[]) {
+  return [summary, ...details].filter(Boolean).join("\n\n");
+}
 
 export default async function ProfilePage() {
   const session = await getCurrentSession();
@@ -25,11 +36,22 @@ export default async function ProfilePage() {
     redirect("/login");
   }
 
-  const pendingAccounts = session.role === "admin" ? await listPendingAccounts() : [];
-  const pendingUsernameChanges =
-    session.role === "admin" ? await listPendingUsernameChanges() : [];
-  const pendingContributions =
-    session.role === "admin" ? await listPendingContributions() : [];
+  const [
+    pendingAccounts,
+    pendingUsernameChanges,
+    pendingContributions,
+    articles,
+    entries
+  ] =
+    session.role === "admin"
+      ? await Promise.all([
+          listPendingAccounts(),
+          listPendingUsernameChanges(),
+          listPendingContributions(),
+          getArticles(),
+          getWikiEntries()
+        ])
+      : [[], [], [], [], []];
 
   return (
     <main className="profile-page">
@@ -121,6 +143,55 @@ export default async function ProfilePage() {
           ) : (
             <p className="muted-text">暂无待审核投稿。</p>
           )}
+        </section>
+      )}
+
+      {session.role === "admin" && (
+        <section className="profile-section">
+          <h2>内容管理</h2>
+          <div className="content-management">
+            <h3>文章</h3>
+            <div className="pending-list">
+              {articles.map((article) => (
+                <div className="pending-row pending-row-tall" key={article.slug}>
+                  <div>
+                    <strong>{article.title}</strong>
+                    <span>{article.slug}</span>
+                  </div>
+                  <div className="content-management-actions">
+                    <EditContentForm
+                      type="article"
+                      contentKey={article.slug}
+                      title={article.title}
+                      content={editableArticleContent(article.content)}
+                    />
+                    <DeleteContentForm type="article" contentKey={article.slug} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <h3>词条</h3>
+            <div className="pending-list">
+              {entries.map((entry) => (
+                <div className="pending-row pending-row-tall" key={entry.term}>
+                  <div>
+                    <strong>{entry.term}</strong>
+                    <span>{entry.summary}</span>
+                  </div>
+                  <div className="content-management-actions">
+                    <EditContentForm
+                      type="entry"
+                      contentKey={entry.term}
+                      title={entry.term}
+                      content={editableEntryContent(entry.summary, entry.details)}
+                    />
+                    <DeleteContentForm type="entry" contentKey={entry.term} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       )}
     </main>

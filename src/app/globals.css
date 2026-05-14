@@ -542,6 +542,45 @@ textarea {
   font-size: 1rem;
 }
 
+.content-management {
+  display: grid;
+  gap: 12px;
+}
+
+.content-management h3 {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.content-management-actions {
+  display: grid;
+  width: min(360px, 100%);
+  gap: 10px;
+}
+
+.edit-content-panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.edit-content-panel summary {
+  cursor: pointer;
+  color: var(--fg);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.edit-content-panel .profile-form {
+  margin-top: 10px;
+}
+
+.edit-content-panel .profile-form textarea {
+  min-height: 160px;
+}
+
 .pending-list {
   display: grid;
   gap: 10px;
@@ -592,6 +631,44 @@ textarea {
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
+}
+
+.delete-content-form {
+  display: grid;
+  width: min(260px, 100%);
+  gap: 8px;
+}
+
+.delete-content-form input[type="password"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--fg);
+  padding: 8px 10px;
+}
+
+.delete-content-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.delete-content-form button {
+  border: 1px solid rgba(255, 156, 138, 0.38);
+  border-radius: 8px;
+  background: transparent;
+  color: #ff9c8a;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 10px;
+}
+
+.delete-content-form button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 /* ── Articles Grid ── */

@@ -25,6 +25,7 @@ export type PendingUsernameChange = {
 };
 
 export type ContributionType = "article" | "entry";
+export type ContentType = "article" | "entry";
 export type PendingContribution = {
   id: number;
   type: ContributionType;
@@ -172,6 +173,29 @@ export async function ensureAuthSchema() {
         status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         reviewed_at TIMESTAMPTZ
+      )
+    `;
+    await sql`ALTER TABLE contributions ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS content_deletions (
+        id SERIAL PRIMARY KEY,
+        type TEXT NOT NULL CHECK (type IN ('article', 'entry')),
+        content_key TEXT NOT NULL,
+        deleted_by INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+        deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(type, content_key)
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS content_edits (
+        id SERIAL PRIMARY KEY,
+        type TEXT NOT NULL CHECK (type IN ('article', 'entry')),
+        content_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        updated_by INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(type, content_key)
       )
     `;
     schemaReady = true;

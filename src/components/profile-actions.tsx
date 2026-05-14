@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import {
   changePasswordAction,
+  deleteContentAction,
+  editContentAction,
   requestUsernameChangeAction,
   reviewAccountAction,
   reviewContributionAction,
@@ -83,14 +85,19 @@ export function ReviewButtons({ username }: { username: string }) {
 
 export function ReviewUsernameChangeButtons({ requestId }: { requestId: number }) {
   const [isPending, startTransition] = useTransition();
+  const [state, setState] = useState<AuthActionState>(initialState);
 
   const review = (status: "approved" | "rejected") => {
     startTransition(async () => {
       const formData = new FormData();
       formData.set("requestId", String(requestId));
       formData.set("status", status);
-      await reviewUsernameChangeAction(formData);
-      window.location.reload();
+      const result = await reviewUsernameChangeAction(formData);
+      setState(result);
+
+      if (result.ok) {
+        window.location.reload();
+      }
     });
   };
 
@@ -102,6 +109,7 @@ export function ReviewUsernameChangeButtons({ requestId }: { requestId: number }
       <button type="button" disabled={isPending} onClick={() => review("rejected")}>
         拒绝
       </button>
+      {state.message && <p className={state.ok ? "form-success" : "form-error"}>{state.message}</p>}
     </div>
   );
 }
@@ -128,5 +136,79 @@ export function ReviewContributionButtons({ contributionId }: { contributionId: 
         拒绝
       </button>
     </div>
+  );
+}
+
+export function DeleteContentForm({
+  type,
+  contentKey
+}: {
+  type: "article" | "entry";
+  contentKey: string;
+}) {
+  const [state, formAction, isPending] = useActionState(deleteContentAction, initialState);
+
+  return (
+    <form className="delete-content-form" action={formAction}>
+      <input name="type" type="hidden" value={type} />
+      <input name="contentKey" type="hidden" value={contentKey} />
+      <input
+        aria-label="管理员密码"
+        name="password"
+        placeholder="管理员密码"
+        type="password"
+        required
+      />
+      <label>
+        <input name="confirmDelete" type="checkbox" value="yes" required />
+        确认删除
+      </label>
+      <button type="submit" disabled={isPending}>
+        删除
+      </button>
+      {state.message && <p className={state.ok ? "form-success" : "form-error"}>{state.message}</p>}
+    </form>
+  );
+}
+
+export function EditContentForm({
+  type,
+  contentKey,
+  title,
+  content
+}: {
+  type: "article" | "entry";
+  contentKey: string;
+  title: string;
+  content: string;
+}) {
+  const [state, formAction, isPending] = useActionState(editContentAction, initialState);
+
+  return (
+    <details className="edit-content-panel">
+      <summary>编辑</summary>
+      <form className="profile-form" action={formAction}>
+        <input name="type" type="hidden" value={type} />
+        <input name="contentKey" type="hidden" value={contentKey} />
+        <label>
+          标题
+          <input
+            name="title"
+            required
+            readOnly={type === "entry"}
+            maxLength={80}
+            defaultValue={title}
+          />
+        </label>
+        <label>
+          内容
+          <textarea name="content" required maxLength={20000} rows={8} defaultValue={content} />
+        </label>
+        <button type="submit" disabled={isPending}>
+          保存
+        </button>
+        {state.message && <p className={state.ok ? "form-success" : "form-error"}>{state.message}</p>}
+      </form>
+    </details>
   );
 }

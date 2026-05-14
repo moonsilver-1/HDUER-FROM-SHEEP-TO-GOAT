@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { cache } from "react";
 import { databaseAvailable, ensureAuthSchema, getAuthSql } from "@/lib/auth";
 
 export type Article = {
@@ -17,6 +18,7 @@ export type WikiEntry = {
 };
 
 const articlesDirectory = path.join(process.cwd(), "articles");
+let staticArticlesCache: Article[] | null = null;
 
 const staticWikiEntries: WikiEntry[] = [
   {
@@ -111,12 +113,27 @@ function excerptFromMarkdown(content: string) {
   return paragraph ? `${paragraph.slice(0, 118)}...` : "来自 HDU 学长学姐的经验文章。";
 }
 
+function slugify(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
+
+  return slug || "contribution";
+}
+
 function getStaticArticles(): Article[] {
+  if (staticArticlesCache) {
+    return staticArticlesCache;
+  }
+
   if (!fs.existsSync(articlesDirectory)) {
     return [];
   }
 
-  return fs
+  staticArticlesCache = fs
     .readdirSync(articlesDirectory)
     .filter((file) => file.endsWith(".md"))
     .map((file) => {
@@ -135,6 +152,8 @@ function getStaticArticles(): Article[] {
       if (b.slug === "main-guide") return 1;
       return a.title.localeCompare(b.title, "zh-CN");
     });
+
+  return staticArticlesCache;
 }
 
 function entryFromContribution(title: string, content: string): WikiEntry {
@@ -152,20 +171,29 @@ function entryFromContribution(title: string, content: string): WikiEntry {
   };
 }
 
-async function getApprovedContributionRows() {
+async function ensureSchemaForRead() {
+  try {
+    await ensureAuthSchema();
+  } catch {
+    // Existing content should still be readable if a later optional migration fails.
+  }
+}
+
+const getApprovedContributionRows = cache(async () => {
   if (!databaseAvailable()) {
     return [];
   }
 
   try {
-    await ensureAuthSchema();
+    await ensureSchemaForRead();
     const sql = getAuthSql();
     return (await sql`
-      SELECT type, title, signature, content, slug
+      SELECT id, type, title, signature, content, slug
       FROM contributions
       WHERE status = 'approved'
       ORDER BY reviewed_at DESC NULLS LAST, created_at DESC
     `) as {
+      id: number;
       type: "article" | "entry";
       title: string;
       signature: string;
@@ -175,36 +203,112 @@ async function getApprovedContributionRows() {
   } catch {
     return [];
   }
-}
+});
+
+const getDeletedContentKeys = cache(async (type: "article" | "entry") => {
+  if (!databaseAvailable()) {
+    return new Set<string>();
+  }
+
+  try {
+    await ensureSchemaForRead();
+    const sql = getAuthSql();
+    const rows = (await sql`
+      SELECT content_key
+      FROM content_deletions
+      WHERE type = ${type}
+    `) as { content_key: string }[];
+
+    return new Set(rows.map((row) => row.content_key));
+  } catch {
+    return new Set<string>();
+  }
+});
+
+const getContentEditRows = cache(async (type: "article" | "entry") => {
+  if (!databaseAvailable()) {
+    return new Map<string, { title: string; content: string }>();
+  }
+
+  try {
+    await ensureSchemaForRead();
+    const sql = getAuthSql();
+    const rows = (await sql`
+      SELECT content_key, title, content
+      FROM content_edits
+      WHERE type = ${type}
+    `) as { content_key: string; title: string; content: string }[];
+
+    return new Map(
+      rows.map((row) => [row.content_key, { title: row.title, content: row.content }])
+    );
+  } catch {
+    return new Map<string, { title: string; content: string }>();
+  }
+});
 
 export async function getArticles(): Promise<Article[]> {
-  const staticArticles = getStaticArticles();
-  const rows = await getApprovedContributionRows();
+  const [rows, deletedSlugs, edits] = await Promise.all([
+    getApprovedContributionRows(),
+    getDeletedContentKeys("article"),
+    getContentEditRows("article")
+  ]);
+  const staticArticles = getStaticArticles().filter((article) => !deletedSlugs.has(article.slug));
+  const staticSlugs = new Set(staticArticles.map((article) => article.slug));
   const contributionArticles = rows
-    .filter((row) => row.type === "article" && row.slug)
+    .filter((row) => row.type === "article")
     .map((row) => {
+      const slug = row.slug || `${slugify(row.title)}-${row.id}`;
       const content = `# ${row.title}\n\n作者：${row.signature}\n\n${row.content}`;
 
       return {
-        slug: row.slug as string,
+        slug,
         title: row.title,
         excerpt: excerptFromMarkdown(content),
         content
       };
-    });
+    })
+    .filter((article) => !deletedSlugs.has(article.slug) && !staticSlugs.has(article.slug));
 
-  return [...staticArticles, ...contributionArticles];
+  return [...staticArticles, ...contributionArticles].map((article) => {
+    const edit = edits.get(article.slug);
+
+    if (!edit) {
+      return article;
+    }
+
+    const content = `# ${edit.title}\n\n${edit.content}`;
+    return {
+      ...article,
+      title: edit.title,
+      excerpt: excerptFromMarkdown(content),
+      content
+    };
+  });
 }
 
 export async function getWikiEntries(): Promise<WikiEntry[]> {
-  const rows = await getApprovedContributionRows();
+  const [rows, deletedTerms, edits] = await Promise.all([
+    getApprovedContributionRows(),
+    getDeletedContentKeys("entry"),
+    getContentEditRows("entry")
+  ]);
   const contributionEntries = rows
-    .filter((row) => row.type === "entry")
+    .filter((row) => row.type === "entry" && !deletedTerms.has(row.title))
     .map((row) => entryFromContribution(row.title, row.content));
 
-  return [...staticWikiEntries, ...contributionEntries];
+  return [
+    ...staticWikiEntries.filter((entry) => !deletedTerms.has(entry.term)),
+    ...contributionEntries
+  ].map((entry) => {
+    const edit = edits.get(entry.term);
+    return edit ? entryFromContribution(entry.term, edit.content) : entry;
+  });
 }
 
 export async function getArticle(slug: string) {
-  return (await getArticles()).find((article) => article.slug === slug);
+  const decodedSlug = decodeURIComponent(slug);
+  return (await getArticles()).find(
+    (article) => article.slug === slug || article.slug === decodedSlug
+  );
 }

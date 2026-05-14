@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
-import type { Article, WikiEntry } from "@/lib/content";
+import type { WikiEntry } from "@/lib/content";
 
 type WikiHomeProps = {
-  articles: Article[];
+  articles: {
+    slug: string;
+    title: string;
+    excerpt: string;
+    searchText: string;
+  }[];
   entries: WikiEntry[];
 };
 
@@ -19,8 +24,7 @@ export function WikiHome({ articles, entries }: WikiHomeProps) {
   const filteredArticles = useMemo(() => {
     if (!normalizedQuery) return articles;
     return articles.filter((article) => {
-      const haystack = `${article.title}\n${article.content}`.toLowerCase();
-      return haystack.includes(normalizedQuery);
+      return article.searchText.includes(normalizedQuery);
     });
   }, [articles, normalizedQuery]);
 

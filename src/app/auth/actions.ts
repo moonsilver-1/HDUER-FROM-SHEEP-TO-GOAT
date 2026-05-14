@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  type ContentType,
   type ContributionType,
   createPasswordRecord,
   databaseAvailable,
@@ -484,10 +485,6 @@ export async function reviewUsernameChangeAction(formData: FormData): Promise<Au
     return { ok: false, message: "申请不存在或已审核。" };
   }
 
-  if (reviewer.id === request.account_id) {
-    return { ok: false, message: "不能审核自己的用户名修改申请。" };
-  }
-
   if (status === "approved") {
     const existingRows = (await sql`
       SELECT id
@@ -573,4 +570,138 @@ export async function reviewContributionAction(formData: FormData): Promise<Auth
   }
 
   return { ok: true, message: `投稿已${status === "approved" ? "通过" : "拒绝"}。` };
+}
+
+export async function deleteContentAction(
+  _previousState: AuthActionState = initialMessage,
+  formData: FormData
+): Promise<AuthActionState> {
+  const session = await getCurrentSession();
+  const type = String(formData.get("type")) as ContentType;
+  const contentKey = cleanText(formData.get("contentKey"));
+  const password = cleanPassword(formData.get("password"));
+  const confirmed = formData.get("confirmDelete") === "yes";
+
+  if (session?.role !== "admin") {
+    return { ok: false, message: "只有管理员可以删除内容。" };
+  }
+
+  if (type !== "article" && type !== "entry") {
+    return { ok: false, message: "内容类型无效。" };
+  }
+
+  if (!contentKey) {
+    return { ok: false, message: "内容不存在。" };
+  }
+
+  if (!confirmed) {
+    return { ok: false, message: "请先勾选确认删除。" };
+  }
+
+  await ensureAuthSchema();
+  const sql = getAuthSql();
+  const accountRows = session.accountId
+    ? ((await sql`
+        SELECT id, password_hash, salt
+        FROM accounts
+        WHERE id = ${session.accountId} AND role = 'admin' AND status = 'approved'
+        LIMIT 1
+      `) as { id: number; password_hash: string; salt: string }[])
+    : ((await sql`
+        SELECT id, password_hash, salt
+        FROM accounts
+        WHERE username = ${session.username} AND role = 'admin' AND status = 'approved'
+        LIMIT 1
+      `) as { id: number; password_hash: string; salt: string }[]);
+  const account = accountRows[0];
+
+  if (!account || !passwordMatches(password, account.salt, account.password_hash)) {
+    return { ok: false, message: "管理员密码不正确。" };
+  }
+
+  await sql`
+    INSERT INTO content_deletions (type, content_key, deleted_by)
+    VALUES (${type}, ${contentKey}, ${account.id})
+    ON CONFLICT (type, content_key)
+    DO UPDATE SET deleted_by = EXCLUDED.deleted_by, deleted_at = NOW()
+  `;
+
+  revalidatePath("/");
+  revalidatePath("/profile");
+  if (type === "article") {
+    revalidatePath(`/articles/${contentKey}`);
+  }
+
+  return { ok: true, message: "内容已删除。" };
+}
+
+export async function editContentAction(
+  _previousState: AuthActionState = initialMessage,
+  formData: FormData
+): Promise<AuthActionState> {
+  const session = await getCurrentSession();
+  const type = String(formData.get("type")) as ContentType;
+  const contentKey = cleanText(formData.get("contentKey"));
+  const title = cleanText(formData.get("title"));
+  const content = cleanText(formData.get("content"));
+
+  if (session?.role !== "admin") {
+    return { ok: false, message: "只有管理员可以编辑内容。" };
+  }
+
+  if (type !== "article" && type !== "entry") {
+    return { ok: false, message: "内容类型无效。" };
+  }
+
+  if (!contentKey) {
+    return { ok: false, message: "内容不存在。" };
+  }
+
+  if (title.length < 1 || title.length > 80) {
+    return { ok: false, message: "标题需要 1-80 个字符。" };
+  }
+
+  if (content.length < 1 || content.length > 20000) {
+    return { ok: false, message: "内容需要 1-20000 个字符。" };
+  }
+
+  await ensureAuthSchema();
+  const sql = getAuthSql();
+  const accountRows = session.accountId
+    ? ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE id = ${session.accountId} AND role = 'admin' AND status = 'approved'
+        LIMIT 1
+      `) as { id: number }[])
+    : ((await sql`
+        SELECT id
+        FROM accounts
+        WHERE username = ${session.username} AND role = 'admin' AND status = 'approved'
+        LIMIT 1
+      `) as { id: number }[]);
+  const account = accountRows[0];
+
+  if (!account) {
+    return { ok: false, message: "管理员账号不存在或未通过审核。" };
+  }
+
+  await sql`
+    INSERT INTO content_edits (type, content_key, title, content, updated_by)
+    VALUES (${type}, ${contentKey}, ${title}, ${content}, ${account.id})
+    ON CONFLICT (type, content_key)
+    DO UPDATE SET
+      title = EXCLUDED.title,
+      content = EXCLUDED.content,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()
+  `;
+
+  revalidatePath("/");
+  revalidatePath("/profile");
+  if (type === "article") {
+    revalidatePath(`/articles/${contentKey}`);
+  }
+
+  return { ok: true, message: "内容已更新。" };
 }
